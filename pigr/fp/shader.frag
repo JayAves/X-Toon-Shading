@@ -5,6 +5,7 @@ in vec3 normEyeSpaceFrag;
 in vec3 light1EyeSpaceFrag;
 in vec3 light2EyeSpaceFrag;
 in vec3 world_pos;
+in vec3 world_normal;
 in vec2 texCoordFrag;
 
 
@@ -38,11 +39,11 @@ uniform int mapChoice;
 //const float scaleFactor = 1.0 / levels;
 //const vec3 diffuseBase = vec3(0.30,0.80,0.10);
 
-const float z_depth_min = 5; // must be > 0
-const float r = 50; // must be > 1
-const float z_depth_max = r * z_depth_min;
-const float z_focus = 7;
-const float shininess = 5;
+uniform float z_depth_min; // must be > 0
+uniform float r; // must be > 1
+float z_depth_max = r * z_depth_min;
+uniform float z_focus;
+uniform float shininess;
 
 
 void main()
@@ -88,14 +89,24 @@ void main()
    float D3 = pow(abs(dot(V, normalize(R_EyeSpace))), shininess);
    vec4 specular_color = texture(tex_toon2, vec2(dot(N, L), D3));
 
+   vec4 finalColor;
+
+   switch(mapChoice){
+      case 1: finalColor = depth_color; break;
+      case 2: finalColor = orientation_color; break;
+      case 3: finalColor = specular_color; break;
+   }
 
    // RESULT
-   FragColor = color; //* vec4(ambient + (diffuse + specular) * attenuation1 , 1); //+ (diffuse2 + specular2) * attenuation2
+   FragColor =  finalColor; //* vec4(ambient + (diffuse + specular) * attenuation1 , 1); //+ (diffuse2 + specular2) * attenuation2
+
+
 }
 
 
 /*
-vec3 ambient = ambientLightColor * ambientReflectance ; //* reflectionColor;
+
+   vec3 ambient = ambientLightColor * ambientReflectance ; //* reflectionColor;
 
    // L: model vertex to light vector
    vec3 L_EyeSpace = normalize(light1EyeSpaceFrag-posEyeSpaceFrag).xyz;
@@ -107,6 +118,8 @@ vec3 ambient = ambientLightColor * ambientReflectance ; //* reflectionColor;
    float specModulation = pow(max(dot(R_EyeSpace, normalize(-posEyeSpaceFrag)), 0.0), specularExponent);
    vec3 specular = light1Color * specularReflectance * specModulation;
 
+   float dist1 = length(posEyeSpaceFrag - light1EyeSpaceFrag);
+   float attenuation1 =  1.0 / (attenuationC0 + attenuationC1 * dist1 + attenuationC2 * dist1 * dist1);
 
    // L: model vertex to light vector
    vec3 L_EyeSpace2 = normalize(light2EyeSpaceFrag-posEyeSpaceFrag).xyz;
@@ -119,8 +132,7 @@ vec3 ambient = ambientLightColor * ambientReflectance ; //* reflectionColor;
    vec3 specular2 = light2Color * specularReflectance * specModulation2;
 
    // attenuation
-   float dist1 = length(posEyeSpaceFrag - light1EyeSpaceFrag);
-   float attenuation1 =  1.0 / (attenuationC0 + attenuationC1 * dist1 + attenuationC2 * dist1 * dist1);
+
    float dist2 = length(posEyeSpaceFrag - light2EyeSpaceFrag);
    float attenuation2 =  1.0 / (attenuationC0 + attenuationC1 * dist2 + attenuationC2 * dist2 * dist2);
 

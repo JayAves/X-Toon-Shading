@@ -23,7 +23,6 @@ const unsigned int SCR_HEIGHT = 720;
 Shader* shader;
 Model* carModel;
 Model* carWheel;
-Model* floorModel;
 Camera camera(glm::vec3(0.0f, 1.6f, 5.0f));
 float lastX = (float)SCR_WIDTH / 2.0;
 float lastY = (float)SCR_HEIGHT / 2.0;
@@ -48,8 +47,18 @@ struct Config {
 
     // light 1
     glm::vec3 light1Position = {-0.8f, 2.4f, 0.0f};
-    glm::vec3 light1Color = {1.0f, 1.0f, 1.0f};
-    float light1Intensity = 1.0f;
+   // glm::vec3 light1Color = {1.0f, 1.0f, 1.0f};
+    //float light1Intensity = 1.0f;
+
+    float z_depth_min = 5;
+    float r = 50;
+    float z_focus = 7;
+    float shininess = 5;
+
+    int choice = 1;
+    bool isDepthOn = true;
+    bool isNearSilOn = false;
+    bool isSpecularOn = false;
 
     // light 2
    // glm::vec3 light2Position = {1.8f, .7f, 2.2f};
@@ -245,7 +254,6 @@ int main()
     ImGui::DestroyContext();
 
 	delete carModel;
-	delete floorModel;
     delete carWheel;
     delete shader;
 
@@ -273,9 +281,42 @@ void drawGui(){
 
         ImGui::Text("Light source: ");
         ImGui::DragFloat3("light position", (float*)&config.light1Position, .1, -20, 20);
-        ImGui::ColorEdit3("light color", (float*)&config.light1Color);
-        ImGui::SliderFloat("light intensity", &config.light1Intensity, 0.0f, 1.0f);
+       // ImGui::ColorEdit3("light color", (float*)&config.light1Color);
+        //ImGui::SliderFloat("light intensity", &config.light1Intensity, 0.0f, 1.0f);
         ImGui::Separator();
+        ImGui::Separator();
+
+        ImGui::Text("Choose the method to calculate D: ");
+        if(ImGui::RadioButton("Depth-based Mapping", config.isDepthOn)) {
+            config.choice = 1;
+            config.isDepthOn = true;
+            config.isNearSilOn = false;
+            config.isSpecularOn = false;
+        }
+        if(ImGui::RadioButton("Near-Silhouette Mapping", config.isNearSilOn)) {
+            config.choice = 2;
+            config.isNearSilOn = true;
+            config.isDepthOn = false;
+            config.isSpecularOn = false;
+        }
+        if(ImGui::RadioButton("Specular Highlights Mapping", config.isSpecularOn)) {
+            config.choice = 3;
+            config.isNearSilOn = false;
+            config.isDepthOn = false;
+            config.isSpecularOn = true;
+        }
+        ImGui::Separator();
+        ImGui::Separator();
+
+        ImGui::Text("Attributes: ");
+        ImGui::SliderFloat("Z min", &config.z_depth_min, 0.1, 20 );
+        ImGui::SliderFloat("Z focus", &config.z_focus, config.z_depth_min, 10*config.z_depth_min );
+        ImGui::SliderFloat("r", &config.r, 1.1, 100 );
+        ImGui::SliderFloat("Shininess", &config.shininess, 0.01, 50 );
+        ImGui::Separator();
+        ImGui::Separator();
+
+
 
       /*  ImGui::Text("Light 2: ");
         ImGui::DragFloat3("light 2 position", (float*)&config.light2Position, .1, -20, 20);
@@ -314,7 +355,14 @@ void drawObjects(){
    // light uniforms
     //shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
     shader->setVec3("light1Position", config.light1Position);
-    shader->setVec3("light1Color", config.light1Color * config.light1Intensity);
+    shader->setInt("mapChoice", config.choice);
+    shader->setFloat("z_depth_min", config.z_depth_min);
+    shader->setFloat("r", config.r);
+    shader->setFloat("z_focus", config.z_focus);
+    shader->setFloat("shininess", config.shininess);
+
+
+   // shader->setVec3("light1Color", config.light1Color * config.light1Intensity);
   /*  shader->setVec3("light2Position", config.light2Position);
     shader->setVec3("light2Color", config.light2Color * config.light2Intensity);
 

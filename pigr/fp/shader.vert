@@ -29,6 +29,7 @@ out vec3 normEyeSpaceFrag;
 out vec3 light1EyeSpaceFrag;
 out vec3 light2EyeSpaceFrag;
 out vec3 world_pos;
+out vec3 world_normal;
 out vec2 texCoordFrag;
 
 
