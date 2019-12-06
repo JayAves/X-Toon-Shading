@@ -90,7 +90,7 @@ void main()
 
 
    // RESULT
-   FragColor = depth_color; //* vec4(ambient + (diffuse + specular) * attenuation1 , 1); //+ (diffuse2 + specular2) * attenuation2
+   FragColor = color; //* vec4(ambient + (diffuse + specular) * attenuation1 , 1); //+ (diffuse2 + specular2) * attenuation2
 }
 
 

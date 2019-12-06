@@ -43,8 +43,8 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 struct Config {
 
     // ambient light
-    glm::vec3 ambientLightColor = {1.0f, 1.0f, 1.0f};
-    float ambientLightIntensity = 0.2f;
+   // glm::vec3 ambientLightColor = {1.0f, 1.0f, 1.0f};
+   // float ambientLightIntensity = 0.2f;
 
     // light 1
     glm::vec3 light1Position = {-0.8f, 2.4f, 0.0f};
@@ -52,12 +52,12 @@ struct Config {
     float light1Intensity = 1.0f;
 
     // light 2
-    glm::vec3 light2Position = {1.8f, .7f, 2.2f};
-    glm::vec3 light2Color = {2.f, 0.0f, 1.0f};
-    float light2Intensity = 1.0f;
+   // glm::vec3 light2Position = {1.8f, .7f, 2.2f};
+   // glm::vec3 light2Color = {2.f, 0.0f, 1.0f};
+    //float light2Intensity = 1.0f;
 
     // material
-    glm::vec3 reflectionColor = {1.0f, 0.0f, 1.0f};
+   /* glm::vec3 reflectionColor = {1.0f, 0.0f, 1.0f};
     float ambientReflectance = 0.5f;
     float diffuseReflectance = 0.5f;
     float specularReflectance = 0.7f;
@@ -66,7 +66,7 @@ struct Config {
     // attenuation (c0, c1 and c2 on the slides)
     float attenuationC0 = 0.5;
     float attenuationC1 = 0.1;
-    float attenuationC2 = 0.1;
+    float attenuationC2 = 0.1; */
 
 } config;
 
@@ -113,9 +113,8 @@ int main()
 
 	shader = new Shader("shader.vert", "shader.frag");
 	carModel = new Model(std::vector<string>{"car_body.obj", "car_paint.obj", "car_spoiler.obj", "car_windows.obj"});
-	//carModel = new Model("ant.obj");
 	carWheel = new Model("car_wheel.obj");
-	floorModel = new Model("floor.obj");
+
 
 
 
@@ -267,18 +266,18 @@ void drawGui(){
     {
         ImGui::Begin("Settings");
 
-        ImGui::Text("Ambient light: ");
+       /* ImGui::Text("Ambient light: ");
         ImGui::ColorEdit3("ambient light color", (float*)&config.ambientLightColor);
         ImGui::SliderFloat("ambient light intensity", &config.ambientLightIntensity, 0.0f, 1.0f);
+        ImGui::Separator(); */
+
+        ImGui::Text("Light source: ");
+        ImGui::DragFloat3("light position", (float*)&config.light1Position, .1, -20, 20);
+        ImGui::ColorEdit3("light color", (float*)&config.light1Color);
+        ImGui::SliderFloat("light intensity", &config.light1Intensity, 0.0f, 1.0f);
         ImGui::Separator();
 
-        ImGui::Text("Light 1: ");
-        ImGui::DragFloat3("light 1 position", (float*)&config.light1Position, .1, -20, 20);
-        ImGui::ColorEdit3("light 1 color", (float*)&config.light1Color);
-        ImGui::SliderFloat("light 1 intensity", &config.light1Intensity, 0.0f, 1.0f);
-        ImGui::Separator();
-
-        ImGui::Text("Light 2: ");
+      /*  ImGui::Text("Light 2: ");
         ImGui::DragFloat3("light 2 position", (float*)&config.light2Position, .1, -20, 20);
         ImGui::ColorEdit3("light 2 color", (float*)&config.light2Color);
         ImGui::SliderFloat("light 2 intensity", &config.light2Intensity, 0.0f, 1.0f);
@@ -297,7 +296,7 @@ void drawGui(){
         ImGui::SliderFloat("attenuation c1", &config.attenuationC1, 0.0f, 1.0f);
         ImGui::SliderFloat("attenuation c2", &config.attenuationC2, 0.0f, 1.0f);
         ImGui::Separator();
-
+*/
 
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
         ImGui::End();
@@ -312,11 +311,11 @@ void drawGui(){
 void drawObjects(){
 
 
-  /*  // light uniforms
-    shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
+   // light uniforms
+    //shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
     shader->setVec3("light1Position", config.light1Position);
     shader->setVec3("light1Color", config.light1Color * config.light1Intensity);
-    shader->setVec3("light2Position", config.light2Position);
+  /*  shader->setVec3("light2Position", config.light2Position);
     shader->setVec3("light2Color", config.light2Color * config.light2Intensity);
 
     // material uniforms
@@ -383,15 +382,6 @@ void drawObjects(){
 	shader->setMat4("view", view);
 	carWheel->Draw();
 
-  // draw floor,
-    // notice that we overwrite the value of one of the uniform variables to set a different floor color
-	shader->setVec3("reflectionColor", .2, .5, .2);
-	model = glm::scale(glm::mat4(1.0), glm::vec3(5.f, 5.f, 5.f));
-	shader->setMat4("model", model);
-	invTranspose = glm::inverse(glm::transpose(view * model));
-	shader->setMat4("invTranspMV", invTranspose);
-	shader->setMat4("view", view);
-	//floorModel->Draw();
 
 
 }
