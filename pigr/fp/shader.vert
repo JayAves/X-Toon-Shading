@@ -8,6 +8,7 @@ uniform mat4 model; // represents model in the world coord space
 uniform mat4 view;  // represents the world in the eye coord space
 uniform mat4 invTranspMV; // inverse of the transpose of (view * model) (used to multiply vectors if there is non-uniform scaling)
 uniform mat4 projection; // camera projection matrix
+//uniform mat4 normalMatrix;
 
 // light uniform variables
 uniform vec3 ambientLightColor;
@@ -31,6 +32,8 @@ out vec3 light2EyeSpaceFrag;
 out vec3 world_pos;
 out vec3 world_normal;
 out vec2 texCoordFrag;
+out vec3 N;
+out vec3 P;
 
 
 
@@ -52,6 +55,12 @@ void main() {
    light1EyeSpaceFrag = light1EyeSpace.xyz;
    light2EyeSpaceFrag = (view * vec4(light2Position, 1.0)).xyz;
    world_pos = mat3(model) * vertex;
+   world_normal = normalize(mat3(model) * normal);
    texCoordFrag = textCoord;
+
+   mat4 modelView = view * model;
+   mat4 normalMatrix = transpose(inverse(modelView));
+   N=(normalMatrix * vec4(normal,1)).xyz;
+   P=(modelView*vec4(vertex, 1)).xyz;
 
 }

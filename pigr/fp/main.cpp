@@ -50,15 +50,22 @@ struct Config {
    // glm::vec3 light1Color = {1.0f, 1.0f, 1.0f};
     //float light1Intensity = 1.0f;
 
-    float z_depth_min = 5;
+    float z_depth_min = 10;
     float r = 50;
-    float z_focus = 7;
+    float z_focus = 12;
     float shininess = 5;
 
     int choice = 1;
     bool isDepthOn = true;
     bool isNearSilOn = false;
     bool isSpecularOn = false;
+
+    int texChoice = 2;
+    bool isTexOneOn = false;
+    bool isTexTwoOn = true;
+    bool isTexThreeOn = false;
+    bool isTexFourOn = false;
+    glm::vec4 texCustomColor = {1.f, 1.f,1.f, 1.f};
 
     // light 2
    // glm::vec3 light2Position = {1.8f, .7f, 2.2f};
@@ -158,8 +165,8 @@ int main()
 
 
     GLuint tex_toon2;
-    int nrChannels, width,height;
-    unsigned char* image = stbi_load("tex1.png", &width, &height, &nrChannels, 0);
+    int nrChannels2, width2,height2;
+    unsigned char* image2 = stbi_load("tex1.png", &width2, &height2, &nrChannels2, 0);
 
 
     glGenTextures(1, &tex_toon2);
@@ -171,8 +178,8 @@ int main()
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
 
-    if (image){
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+    if (image2){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width2, height2, 0, GL_RGBA, GL_UNSIGNED_BYTE, image2);
         glGenerateMipmap(GL_TEXTURE_2D);
 
     } else{
@@ -182,19 +189,62 @@ int main()
 
     glActiveTexture(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(image);
+    stbi_image_free(image2);
+
+    GLuint tex_toon3;
+    int nrChannels3, width3,height3;
+    unsigned char* image3 = stbi_load("tex3.png", &width3, &height3, &nrChannels3, 0);
 
 
-    GLuint te;
-    GLubyte m[sizeof(toon_tex_data)][sizeof(toon_tex_data)];
+    glGenTextures(1, &tex_toon3);
+    glBindTexture(GL_TEXTURE_2D, tex_toon3);
 
 
-    for (int i=0; i< sizeof(toon_tex_data); i++){
-        for(int j=0; j< sizeof(toon_tex_data); j++){
-            m[i][j] = toon_tex_data[i] + 10*j;
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
 
-        }
+    if (image3){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width3, height3, 0, GL_RGBA, GL_UNSIGNED_BYTE, image3);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 3 LOADING FAILED" << "\n";
+
     }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image3);
+
+    GLuint tex_toon4;
+    int nrChannels4, width4,height4;
+    unsigned char* image4 = stbi_load("tex5.png", &width4, &height4, &nrChannels4, 0);
+
+
+    glGenTextures(1, &tex_toon4);
+    glBindTexture(GL_TEXTURE_2D, tex_toon4);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image4){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width4, height4, 0, GL_RGBA, GL_UNSIGNED_BYTE, image4);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 4 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image4);
+
 
 
 
@@ -232,10 +282,30 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		shader->use();
-        shader->setInt("text_toon", tex_toon);
+
+		shader->setInt("text_toon", tex_toon);
         glBindTexture(GL_TEXTURE_1D, tex_toon);
-        shader->setInt("text_toon2", tex_toon2);
-        glBindTexture(GL_TEXTURE_2D, tex_toon2);
+
+        switch (config.texChoice){
+            case 2: {
+                shader->setInt("text_toon2d", tex_toon2);
+                glBindTexture(GL_TEXTURE_2D, tex_toon2);
+                break;
+            }
+            case 3:{
+                shader->setInt("text_toon2d", tex_toon3);
+                glBindTexture(GL_TEXTURE_2D, tex_toon3);
+                break;
+            }
+            case 4:{
+                shader->setInt("text_toon2d", tex_toon4);
+                glBindTexture(GL_TEXTURE_2D, tex_toon4);
+                break;
+            }
+        }
+
+
+
 
         drawObjects();
 
@@ -316,6 +386,43 @@ void drawGui(){
         ImGui::Separator();
         ImGui::Separator();
 
+        ImGui::Text("Choose texture: ");
+        if(ImGui::RadioButton("Simple 1D LUT Fixed Color", config.isTexOneOn)) {
+            config.texChoice = 1;
+            config.isTexOneOn = true;
+            config.isTexTwoOn = false;
+            config.isTexThreeOn = false;
+            config.isTexFourOn = false;
+
+        }
+        if(ImGui::RadioButton("Fixed Color 2D Rectangular Map", config.isTexTwoOn)) {
+            config.texChoice = 2;
+            config.isTexOneOn = false;
+            config.isTexTwoOn = true;
+            config.isTexThreeOn = false;
+            config.isTexFourOn = false;
+
+        }
+        if(ImGui::RadioButton("Fixed Color 2D Curve Map", config.isTexThreeOn)) {
+            config.texChoice = 3;
+            config.isTexOneOn = false;
+            config.isTexTwoOn = false;
+            config.isTexThreeOn = true;
+            config.isTexFourOn = false;
+
+        }
+        if(ImGui::RadioButton("Customizable Color 2D Rectangular Map", config.isTexFourOn)) {
+            config.texChoice = 4;
+            config.isTexOneOn = false;
+            config.isTexTwoOn = false;
+            config.isTexThreeOn = false;
+            config.isTexFourOn = true;
+        }
+        ImGui::Separator();
+        ImGui::Separator();
+
+
+
 
 
       /*  ImGui::Text("Light 2: ");
@@ -354,8 +461,11 @@ void drawObjects(){
 
    // light uniforms
     //shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
+
     shader->setVec3("light1Position", config.light1Position);
     shader->setInt("mapChoice", config.choice);
+    shader->setInt("texChoice", config.texChoice);
+    shader->setVec4("texCustomColor", config.texCustomColor);
     shader->setFloat("z_depth_min", config.z_depth_min);
     shader->setFloat("r", config.r);
     shader->setFloat("z_focus", config.z_focus);
@@ -383,6 +493,8 @@ void drawObjects(){
 	glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
     glm::mat4 view = camera.GetViewMatrix();
     glm::mat4 viewProjection = projection * view;
+
+    shader->setVec3("eye", camera.Position);
 
 	// set projection matrix uniform
     shader->setMat4("projection", projection);
@@ -504,3 +616,4 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
+
