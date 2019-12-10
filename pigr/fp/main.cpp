@@ -56,16 +56,19 @@ struct Config {
     float shininess = 5;
 
     int choice = 1;
-    bool isDepthOn = true;
+    bool isDepth1On = true;
+    bool isDepth2On = false;
     bool isNearSilOn = false;
     bool isSpecularOn = false;
 
-    int texChoice = 2;
-    bool isTexOneOn = false;
-    bool isTexTwoOn = true;
+    int texChoice = 1;
+
+
+   /* bool isTexOneOn = true;
+    bool isTexTwoOn = false;
     bool isTexThreeOn = false;
     bool isTexFourOn = false;
-    glm::vec4 texCustomColor = {1.f, 1.f,1.f, 1.f};
+    glm::vec4 texCustomColor = {1.f, 1.f,1.f, 1.f}; */
 
     // light 2
    // glm::vec3 light2Position = {1.8f, .7f, 2.2f};
@@ -133,8 +136,9 @@ int main()
 
 
 
+    /*  PREVIOUS VERSION CODE: 1D LUT
 
-    //declare our LUT
+     //declare our LUT
     GLuint  tex_toon;
     static GLubyte toon_tex_data[] =
             {
@@ -163,10 +167,41 @@ int main()
 
     glGenerateMipmap(GL_TEXTURE_1D);
 
+    */
 
+    // TEXTURE 1 - DEPTH BASED ATTRIBUTE MAPPING 1
+    GLuint tex_toon1;
+    int nrChannels1, width1,height1;
+    unsigned char* image1 = stbi_load("tex1.png", &width1, &height1, &nrChannels1, 0);
+
+
+    glGenTextures(1, &tex_toon1);
+    glBindTexture(GL_TEXTURE_2D, tex_toon1);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image1){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width1, height1, 0, GL_RGBA, GL_UNSIGNED_BYTE, image1);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 2 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image1);
+
+
+    // TEXTURE 2 - DEPTH BASED ATTRIBUTE MAPPING 2
     GLuint tex_toon2;
     int nrChannels2, width2,height2;
-    unsigned char* image2 = stbi_load("tex1.png", &width2, &height2, &nrChannels2, 0);
+    unsigned char* image2 = stbi_load("tex2.png", &width2, &height2, &nrChannels2, 0);
 
 
     glGenTextures(1, &tex_toon2);
@@ -191,6 +226,7 @@ int main()
     glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(image2);
 
+    // TEXTURE 3 - NEAR-SILHOUETTE ATTRIBUTE MAPPING
     GLuint tex_toon3;
     int nrChannels3, width3,height3;
     unsigned char* image3 = stbi_load("tex3.png", &width3, &height3, &nrChannels3, 0);
@@ -218,9 +254,10 @@ int main()
     glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(image3);
 
+    // TEXTURE 2 - SPECULAR HIGHLIGHTS ATTRIBUTE MAPPING
     GLuint tex_toon4;
     int nrChannels4, width4,height4;
-    unsigned char* image4 = stbi_load("tex5.png", &width4, &height4, &nrChannels4, 0);
+    unsigned char* image4 = stbi_load("tex4.png", &width4, &height4, &nrChannels4, 0);
 
 
     glGenTextures(1, &tex_toon4);
@@ -283,10 +320,16 @@ int main()
 
 		shader->use();
 
-		shader->setInt("text_toon", tex_toon);
-        glBindTexture(GL_TEXTURE_1D, tex_toon);
+		// PREVIOUS VERSION
+		//shader->setInt("text_toon", tex_toon);
+        //glBindTexture(GL_TEXTURE_1D, tex_toon);
 
         switch (config.texChoice){
+            case 1: {
+                shader->setInt("text_toon2d", tex_toon1);
+                glBindTexture(GL_TEXTURE_2D, tex_toon1);
+                break;
+            }
             case 2: {
                 shader->setInt("text_toon2d", tex_toon2);
                 glBindTexture(GL_TEXTURE_2D, tex_toon2);
@@ -357,22 +400,36 @@ void drawGui(){
         ImGui::Separator();
 
         ImGui::Text("Choose the method to calculate D: ");
-        if(ImGui::RadioButton("Depth-based Mapping", config.isDepthOn)) {
+        if(ImGui::RadioButton("Depth-based Mapping 1 ", config.isDepth1On)) {
             config.choice = 1;
-            config.isDepthOn = true;
+            config.texChoice =1;
+            config.isDepth1On = true;
+            config.isDepth2On = false;
+            config.isNearSilOn = false;
+            config.isSpecularOn = false;
+        }
+        if(ImGui::RadioButton("Depth-based Mapping 2 ", config.isDepth2On)) {
+            config.choice = 1;
+            config.texChoice =2;
+            config.isDepth1On = false;
+            config.isDepth2On = true;
             config.isNearSilOn = false;
             config.isSpecularOn = false;
         }
         if(ImGui::RadioButton("Near-Silhouette Mapping", config.isNearSilOn)) {
             config.choice = 2;
+            config.texChoice = 3;
             config.isNearSilOn = true;
-            config.isDepthOn = false;
+            config.isDepth1On = false;
+            config.isDepth2On = false;
             config.isSpecularOn = false;
         }
         if(ImGui::RadioButton("Specular Highlights Mapping", config.isSpecularOn)) {
             config.choice = 3;
+            config.texChoice = 4;
             config.isNearSilOn = false;
-            config.isDepthOn = false;
+            config.isDepth1On = false;
+            config.isDepth2On = false;
             config.isSpecularOn = true;
         }
         ImGui::Separator();
@@ -386,7 +443,14 @@ void drawGui(){
         ImGui::Separator();
         ImGui::Separator();
 
-        ImGui::Text("Choose texture: ");
+
+
+
+
+
+
+      /*
+       * ImGui::Text("Choose texture: ");
         if(ImGui::RadioButton("Simple 1D LUT Fixed Color", config.isTexOneOn)) {
             config.texChoice = 1;
             config.isTexOneOn = true;
@@ -420,12 +484,7 @@ void drawGui(){
         }
         ImGui::Separator();
         ImGui::Separator();
-
-
-
-
-
-      /*  ImGui::Text("Light 2: ");
+       * ImGui::Text("Light 2: ");
         ImGui::DragFloat3("light 2 position", (float*)&config.light2Position, .1, -20, 20);
         ImGui::ColorEdit3("light 2 color", (float*)&config.light2Color);
         ImGui::SliderFloat("light 2 intensity", &config.light2Intensity, 0.0f, 1.0f);
@@ -465,7 +524,7 @@ void drawObjects(){
     shader->setVec3("light1Position", config.light1Position);
     shader->setInt("mapChoice", config.choice);
     shader->setInt("texChoice", config.texChoice);
-    shader->setVec4("texCustomColor", config.texCustomColor);
+   // shader->setVec4("texCustomColor", config.texCustomColor);
     shader->setFloat("z_depth_min", config.z_depth_min);
     shader->setFloat("r", config.r);
     shader->setFloat("z_focus", config.z_focus);

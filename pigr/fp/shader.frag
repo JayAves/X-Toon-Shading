@@ -16,7 +16,7 @@ uniform vec3 light1Color;
 uniform vec3 light1Position;
 
 // Textures
-uniform sampler1D tex_toon;
+uniform sampler1D tex_toon; // PREVIOUS VERSION
 uniform sampler2D tex_toon2d;
 
 // Choice of texture
@@ -56,9 +56,9 @@ void main()
    vec3 L_EyeSpace = normalize(light1EyeSpaceFrag-posEyeSpaceFrag).xyz;
    vec3 R_EyeSpace =  - L_EyeSpace - 2 * dot(-L_EyeSpace, normEyeSpaceFrag) * normEyeSpaceFrag;
 
-   // toon shading 1D LUT
-   float tc = pow(max(0.0, dot(N, L)), shininess);
-   vec4 color = texture(tex_toon, tc);
+   // toon shading 1D LUT - PREVIOUS VERSION
+   //float tc = pow(max(0.0, dot(N, L)), shininess);
+   //vec4 color = texture(tex_toon, tc);
 
    // Depth based attribute mapping //
    float z_depth = distance(posEyeSpaceFrag, vec3(0.0f,0.0f,0.0f));
@@ -89,7 +89,7 @@ void main()
    }
 
 
-
+   // simple contour
    float c=abs(dot(normalize(P), normalize(N)));
    if (c<0.175)
       FragColor= vec4(0.f);
