@@ -20,18 +20,22 @@
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-//Shader* shader;
+
 Model* carModel;
 Model* carWheel;
 Camera camera(glm::vec3(0.0f, 1.6f, 5.0f));
 float lastX = (float)SCR_WIDTH / 2.0;
 float lastY = (float)SCR_HEIGHT / 2.0;
 float deltaTime;
-// used to stop camera movement when GUI is open
 bool isPaused = false;
+glm::mat4 view;
+unsigned int gBuffer, gPosition, gNormal, gAlbedoSpec;
+GLuint  tex_toon, tex_toon1, tex_toon2, tex_toon3, tex_toon4;
 
-void drawObjects();
+void drawObjects(Shader shader);
 void drawGui();
+void initGbuffer();
+void initTextures();
 void processInput(GLFWwindow* window);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void key_input_callback(GLFWwindow* window, int button, int other, int action, int mods);
@@ -41,7 +45,6 @@ void renderQuad();
 
 
 struct Config {
-
 
     // light 1
     glm::vec3 light1Position = {-0.8f, 2.4f, 0.0f};
@@ -106,11 +109,8 @@ int main()
         return -1;
     }
 
-
-
     glEnable(GL_DEPTH_TEST);
 
-    // build and compile shaders
     Shader shaderGeometryPass("g_buffer.vert", "g_buffer.frag");
     Shader shaderLightingPass("deferred_shading.vert", "deferred_shading.frag");
 
@@ -119,203 +119,17 @@ int main()
 	carModel = new Model(std::vector<string>{"car_body.obj", "car_paint.obj", "car_spoiler.obj", "car_windows.obj"});
 	carWheel = new Model("car_wheel.obj");
 
-
-	// configure g-buffer framebuffer
-    unsigned int gBuffer;
-    glGenFramebuffers(1, &gBuffer);
-    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-    unsigned int gPosition, gNormal, gAlbedoSpec;
-    // position color buffer
-    glGenTextures(1, &gPosition);
-    glBindTexture(GL_TEXTURE_2D, gPosition);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
-    // normal color buffer
-    glGenTextures(1, &gNormal);
-    glBindTexture(GL_TEXTURE_2D, gNormal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
-    // color + specular color buffer
-    glGenTextures(1, &gAlbedoSpec);
-    glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
-
-    unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
-    glDrawBuffers(3, attachments);
-    unsigned int rboDepth;
-    glGenRenderbuffers(1, &rboDepth);
-    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        std::cout << "Framebuffer not complete!" << std::endl;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
+	// CONFIGURE G_BUFFER
+    initGbuffer();
 
     // TEXTURES INIT
+    initTextures();
 
-    /*  PREVIOUS VERSION CODE: 1D LUT
-
-     //declare our LUT
-    GLuint  tex_toon;
-    static GLubyte toon_tex_data[] =
-            {
-                    0x44, 0x00, 0x00, 0x00,
-                    0x88, 0x00, 0x00, 0x00,
-                    0xCC, 0x00, 0x00, 0x00,
-                    0xFF, 0x00, 0x00, 0x00
-            };
-
-
-
-    glGenTextures(1 , &tex_toon); //Generate texture
-    glBindTexture(GL_TEXTURE_1D, tex_toon); //Bind texture, a 1D texture
-   // glTextureStorage1D(GL_TEXTURE_1D, 1, GL_RGB8,  4);
-
-
-    //Pass the data
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); //Conditions
-
-    glTexImage1D(GL_TEXTURE_1D, 0,
-                    GL_RGB8, sizeof(toon_tex_data) / 4, 0,
-                    GL_RGBA, GL_UNSIGNED_BYTE,
-                    toon_tex_data);
-
-    glGenerateMipmap(GL_TEXTURE_1D);
-
-    */
-
-    // TEXTURE 1 - DEPTH BASED ATTRIBUTE MAPPING 1
-    GLuint tex_toon1;
-    int nrChannels1, width1,height1;
-    unsigned char* image1 = stbi_load("tex1.png", &width1, &height1, &nrChannels1, 0);
-
-
-    glGenTextures(1, &tex_toon1);
-    glBindTexture(GL_TEXTURE_2D, tex_toon1);
-
-
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
-
-    if (image1){
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width1, height1, 0, GL_RGBA, GL_UNSIGNED_BYTE, image1);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-    } else{
-        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 2 LOADING FAILED" << "\n";
-
-    }
-
-    glActiveTexture(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(image1);
-
-
-    // TEXTURE 2 - DEPTH BASED ATTRIBUTE MAPPING 2
-    GLuint tex_toon2;
-    int nrChannels2, width2,height2;
-    unsigned char* image2 = stbi_load("tex2.png", &width2, &height2, &nrChannels2, 0);
-
-
-    glGenTextures(1, &tex_toon2);
-    glBindTexture(GL_TEXTURE_2D, tex_toon2);
-
-
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
-
-    if (image2){
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width2, height2, 0, GL_RGBA, GL_UNSIGNED_BYTE, image2);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-    } else{
-        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 2 LOADING FAILED" << "\n";
-
-    }
-
-    glActiveTexture(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(image2);
-
-    // TEXTURE 3 - NEAR-SILHOUETTE ATTRIBUTE MAPPING
-    GLuint tex_toon3;
-    int nrChannels3, width3,height3;
-    unsigned char* image3 = stbi_load("tex3.png", &width3, &height3, &nrChannels3, 0);
-
-
-    glGenTextures(1, &tex_toon3);
-    glBindTexture(GL_TEXTURE_2D, tex_toon3);
-
-
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
-
-    if (image3){
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width3, height3, 0, GL_RGBA, GL_UNSIGNED_BYTE, image3);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-    } else{
-        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 3 LOADING FAILED" << "\n";
-
-    }
-
-    glActiveTexture(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(image3);
-
-    // TEXTURE 2 - SPECULAR HIGHLIGHTS ATTRIBUTE MAPPING
-    GLuint tex_toon4;
-    int nrChannels4, width4,height4;
-    unsigned char* image4 = stbi_load("tex4.png", &width4, &height4, &nrChannels4, 0);
-
-
-    glGenTextures(1, &tex_toon4);
-    glBindTexture(GL_TEXTURE_2D, tex_toon4);
-
-
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
-
-    if (image4){
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width4, height4, 0, GL_RGBA, GL_UNSIGNED_BYTE, image4);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-    } else{
-        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 4 LOADING FAILED" << "\n";
-
-    }
-
-    glActiveTexture(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(image4);
-
-
-    // shader configuration
+    // LIGHTING SHADER CONFIG
     shaderLightingPass.use();
     shaderLightingPass.setInt("gPosition", 0);
     shaderLightingPass.setInt("gNormal", 1);
     shaderLightingPass.setInt("gAlbedoSpec", 2);
-
-
 
     // set up the z-buffer
     glDepthRange(-1,1); // make the NDC a right handed coordinate system, with the camera pointing towards -z
@@ -336,6 +150,7 @@ int main()
     glEnable(GL_CULL_FACE);
 
 
+
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -350,9 +165,14 @@ int main()
         glClearColor(0.5f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
+        // 1.  geometry pass
+        // ---------------------------------------------------------------------------------------------------------------------------------------
+
+
         // camera parameters
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-        glm::mat4 view = camera.GetViewMatrix();
+        view = camera.GetViewMatrix();
         glm::mat4 viewProjection = projection * view;
 
         glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
@@ -370,8 +190,6 @@ int main()
         shaderGeometryPass.setFloat("r", config.r);
         shaderGeometryPass.setFloat("z_focus", config.z_focus);
         shaderGeometryPass.setFloat("shininess", config.shininess);
-
-
 
         // PREVIOUS VERSION
         //shaderGeometryPass.setInt("text_toon", tex_toon);
@@ -404,53 +222,12 @@ int main()
 
 
         // DRAWING OF MODELS
-
-        // draw car
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::mat4 invTranspose = glm::inverse(glm::transpose(view * model));
-        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
-        shaderGeometryPass.setMat4("view", view);
-        shaderGeometryPass.setMat4("model", model);
-        carModel->Draw();
-
-        // draw wheel
-        model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, 1.2456));
-        shaderGeometryPass.setMat4("model", model);
-        invTranspose = glm::inverse(glm::transpose(view * model));
-        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
-        shaderGeometryPass.setMat4("view", view);
-        carWheel->Draw();
-
-        // draw wheel
-        model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, -1.273));
-        shaderGeometryPass.setMat4("model", model);
-        invTranspose = glm::inverse(glm::transpose(view * model));
-        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
-        shaderGeometryPass.setMat4("view", view);
-        carWheel->Draw();
-
-        // draw wheel
-        model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
-        model = glm::translate(model, glm::vec3(-.6247, .32, 1.2456));
-        shaderGeometryPass.setMat4("model", model);
-        invTranspose = glm::inverse(glm::transpose(view * model));
-        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
-        shaderGeometryPass.setMat4("view", view);
-        carWheel->Draw();
-
-        // draw wheel
-        model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
-        model = glm::translate(model, glm::vec3(-.6247, .32, -1.273));
-        shaderGeometryPass.setMat4("model", model);
-        invTranspose = glm::inverse(glm::transpose(view * model));
-        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
-        shaderGeometryPass.setMat4("view", view);
-        carWheel->Draw();
+        drawObjects(shaderGeometryPass);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-      // 2. lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the gbuffer's content.
-        // -----------------------------------------------------------------------------------------------------------------------
+      // 2. lighting pass
+        // ---------------------------------------------------------------------------------------------------------------------------------------------
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         shaderLightingPass.use();
         glActiveTexture(GL_TEXTURE0);
@@ -473,22 +250,20 @@ int main()
         // ----------------------------------------------------------------------------------
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
-        // blit to default framebuffer. Note that this may or may not work as the internal formats of both the FBO and default framebuffer have to match.
-        // the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the
-        // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
-        glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT,
-                          GL_NEAREST);
+        glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
 
-
+        // DRAW GUI
         if (isPaused) {
 			drawGui();
 		}
 
+        // SWAP AND POLL
         glfwSwapBuffers(window);
         glfwPollEvents();
+
     }
 
     // Cleanup
@@ -509,6 +284,7 @@ int main()
 
 
 void drawGui(){
+
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -517,12 +293,12 @@ void drawGui(){
     {
         ImGui::Begin("Settings");
 
-        ImGui::Text("Light source: ");
-        ImGui::DragFloat3("light position", (float*)&config.light1Position, .1, -20, 20);
+        ImGui::Text("Light source: \n ");
+        ImGui::DragFloat3("Position", (float*)&config.light1Position, .1, -20, 20);
         ImGui::Separator();
         ImGui::Separator();
 
-        ImGui::Text("Choose the method to calculate D: ");
+        ImGui::Text("Choose the method to calculate D: \n");
         if(ImGui::RadioButton("Depth-based Mapping 1 ", config.isDepth1On)) {
             config.choice = 1;
             config.texChoice =1;
@@ -558,7 +334,12 @@ void drawGui(){
         ImGui::Separator();
         ImGui::Separator();
 
-        ImGui::Text("Attributes: ");
+        ImGui::Text("Parameters: \n ");
+        ImGui::Text("A): D = 1 - log(z/z_min) / log(z_max/z_min) \n ");
+        ImGui::Text("B): D = |N · V| ^ r \n ");
+        ImGui::Text("C): D = |V · R| ^ shininess \n ");
+
+
         ImGui::SliderFloat("Z min", &config.z_depth_min, 0.1, 20 );
         //ImGui::SliderFloat("Z focus", &config.z_focus, config.z_depth_min, 10*config.z_depth_min );
         ImGui::SliderFloat("r", &config.r, 1.1, 100 );
@@ -584,19 +365,50 @@ void drawGui(){
 
 
 
-void drawObjects(){
+void drawObjects(Shader shaderGeometryPass){
 
 
-   // light uniforms
-    //shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
+    // draw car
+    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 invTranspose = glm::inverse(glm::transpose(view * model));
+    shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+    shaderGeometryPass.setMat4("view", view);
+    shaderGeometryPass.setMat4("model", model);
+    carModel->Draw();
 
+    // draw wheel
+    model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, 1.2456));
+    shaderGeometryPass.setMat4("model", model);
+    invTranspose = glm::inverse(glm::transpose(view * model));
+    shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+    shaderGeometryPass.setMat4("view", view);
+    carWheel->Draw();
 
+    // draw wheel
+    model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, -1.273));
+    shaderGeometryPass.setMat4("model", model);
+    invTranspose = glm::inverse(glm::transpose(view * model));
+    shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+    shaderGeometryPass.setMat4("view", view);
+    carWheel->Draw();
 
+    // draw wheel
+    model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
+    model = glm::translate(model, glm::vec3(-.6247, .32, 1.2456));
+    shaderGeometryPass.setMat4("model", model);
+    invTranspose = glm::inverse(glm::transpose(view * model));
+    shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+    shaderGeometryPass.setMat4("view", view);
+    carWheel->Draw();
 
-/*	*/
-
-
-
+    // draw wheel
+    model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
+    model = glm::translate(model, glm::vec3(-.6247, .32, -1.273));
+    shaderGeometryPass.setMat4("model", model);
+    invTranspose = glm::inverse(glm::transpose(view * model));
+    shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+    shaderGeometryPass.setMat4("view", view);
+    carWheel->Draw();
 }
 
 
@@ -669,6 +481,196 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
+
+
+// INIT G_BUFFER FRAMEBUFFER
+void initGbuffer(){
+
+    glGenFramebuffers(1, &gBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+    // position color buffer
+    glGenTextures(1, &gPosition);
+    glBindTexture(GL_TEXTURE_2D, gPosition);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+    // normal color buffer
+    glGenTextures(1, &gNormal);
+    glBindTexture(GL_TEXTURE_2D, gNormal);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
+    // color + specular color buffer
+    glGenTextures(1, &gAlbedoSpec);
+    glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
+
+    unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+    glDrawBuffers(3, attachments);
+    unsigned int rboDepth;
+    glGenRenderbuffers(1, &rboDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Framebuffer not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+
+void initTextures(){
+
+
+    // TEXTURE 1 - DEPTH BASED ATTRIBUTE MAPPING 1
+    int nrChannels1, width1,height1;
+    unsigned char* image1 = stbi_load("tex1.png", &width1, &height1, &nrChannels1, 0);
+
+
+    glGenTextures(1, &tex_toon1);
+    glBindTexture(GL_TEXTURE_2D, tex_toon1);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image1){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width1, height1, 0, GL_RGBA, GL_UNSIGNED_BYTE, image1);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 2 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image1);
+
+
+    // TEXTURE 2 - DEPTH BASED ATTRIBUTE MAPPING 2
+    int nrChannels2, width2,height2;
+    unsigned char* image2 = stbi_load("tex2.png", &width2, &height2, &nrChannels2, 0);
+
+
+    glGenTextures(1, &tex_toon2);
+    glBindTexture(GL_TEXTURE_2D, tex_toon2);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image2){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width2, height2, 0, GL_RGBA, GL_UNSIGNED_BYTE, image2);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 2 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image2);
+
+    // TEXTURE 3 - NEAR-SILHOUETTE ATTRIBUTE MAPPING
+    int nrChannels3, width3,height3;
+    unsigned char* image3 = stbi_load("tex3.png", &width3, &height3, &nrChannels3, 0);
+
+
+    glGenTextures(1, &tex_toon3);
+    glBindTexture(GL_TEXTURE_2D, tex_toon3);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image3){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width3, height3, 0, GL_RGBA, GL_UNSIGNED_BYTE, image3);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 3 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image3);
+
+    // TEXTURE 2 - SPECULAR HIGHLIGHTS ATTRIBUTE MAPPING
+    int nrChannels4, width4,height4;
+    unsigned char* image4 = stbi_load("tex4.png", &width4, &height4, &nrChannels4, 0);
+
+
+    glGenTextures(1, &tex_toon4);
+    glBindTexture(GL_TEXTURE_2D, tex_toon4);
+
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_NEAREST); //magnify - more pixelly
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_NEAREST); // minimize
+
+    if (image4){
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width4, height4, 0, GL_RGBA, GL_UNSIGNED_BYTE, image4);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+    } else{
+        std::cout << "ERROR::TEXTURE::LOADFROMFILE TEX 4 LOADING FAILED" << "\n";
+
+    }
+
+    glActiveTexture(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(image4);
+
+    /*  PREVIOUS VERSION CODE: 1D LUT
+
+     //declare our LUT
+
+    static GLubyte toon_tex_data[] =
+            {
+                    0x44, 0x00, 0x00, 0x00,
+                    0x88, 0x00, 0x00, 0x00,
+                    0xCC, 0x00, 0x00, 0x00,
+                    0xFF, 0x00, 0x00, 0x00
+            };
+
+
+
+    glGenTextures(1 , &tex_toon); //Generate texture
+    glBindTexture(GL_TEXTURE_1D, tex_toon); //Bind texture, a 1D texture
+   // glTextureStorage1D(GL_TEXTURE_1D, 1, GL_RGB8,  4);
+
+
+    //Pass the data
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); //Conditions
+
+    glTexImage1D(GL_TEXTURE_1D, 0,
+                    GL_RGB8, sizeof(toon_tex_data) / 4, 0,
+                    GL_RGBA, GL_UNSIGNED_BYTE,
+                    toon_tex_data);
+
+    glGenerateMipmap(GL_TEXTURE_1D);
+
+    */
+
+}
+
+
 
 // renderQuad() renders a 1x1 XY quad in NDC
 // -----------------------------------------

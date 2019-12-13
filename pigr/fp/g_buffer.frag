@@ -70,7 +70,7 @@ void main()
    //vec4 color = texture(tex_toon, tc);
 
    // Depth based attribute mapping //
-   float z_depth = distance(posEyeSpaceFrag, vec3(0.0f,0.0f,0.0f));
+   float z_depth = posEyeSpaceFrag.z;
    float D = 1 -log(z_depth/z_depth_min) / log(z_depth_max/z_depth_min);
    vec4 depth_color = texture(tex_toon2d, vec2(dot(N, L), D));
 
