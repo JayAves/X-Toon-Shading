@@ -40,7 +40,7 @@ out vec3 P;
 
 void main() {
    
-// vertex in eye space (for light computation in eye space)
+   // vertex in eye space (for light computation in eye space)
    vec4 posEyeSpace = view * model * vec4(vertex, 1.0);
    // normal in eye space (for light computation in eye space)
    vec3 normEyeSpace = normalize((invTranspMV * vec4(normal, 0.0)).xyz);

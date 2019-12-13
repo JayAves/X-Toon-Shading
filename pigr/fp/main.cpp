@@ -20,7 +20,7 @@
 const unsigned int SCR_WIDTH = 1280;
 const unsigned int SCR_HEIGHT = 720;
 
-Shader* shader;
+//Shader* shader;
 Model* carModel;
 Model* carWheel;
 Camera camera(glm::vec3(0.0f, 1.6f, 5.0f));
@@ -37,18 +37,14 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void key_input_callback(GLFWwindow* window, int button, int other, int action, int mods);
 void cursor_input_callback(GLFWwindow* window, double posX, double posY);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void renderQuad();
 
 
 struct Config {
 
-    // ambient light
-   // glm::vec3 ambientLightColor = {1.0f, 1.0f, 1.0f};
-   // float ambientLightIntensity = 0.2f;
 
     // light 1
     glm::vec3 light1Position = {-0.8f, 2.4f, 0.0f};
-   // glm::vec3 light1Color = {1.0f, 1.0f, 1.0f};
-    //float light1Intensity = 1.0f;
 
     float z_depth_min = 10;
     float r = 50;
@@ -63,29 +59,10 @@ struct Config {
 
     int texChoice = 1;
 
+    // post processing
+    bool sharpen = false;
+    bool edgeDetection = false;
 
-   /* bool isTexOneOn = true;
-    bool isTexTwoOn = false;
-    bool isTexThreeOn = false;
-    bool isTexFourOn = false;
-    glm::vec4 texCustomColor = {1.f, 1.f,1.f, 1.f}; */
-
-    // light 2
-   // glm::vec3 light2Position = {1.8f, .7f, 2.2f};
-   // glm::vec3 light2Color = {2.f, 0.0f, 1.0f};
-    //float light2Intensity = 1.0f;
-
-    // material
-   /* glm::vec3 reflectionColor = {1.0f, 0.0f, 1.0f};
-    float ambientReflectance = 0.5f;
-    float diffuseReflectance = 0.5f;
-    float specularReflectance = 0.7f;
-    float specularExponent = 20.0f;
-
-    // attenuation (c0, c1 and c2 on the slides)
-    float attenuationC0 = 0.5;
-    float attenuationC1 = 0.1;
-    float attenuationC2 = 0.1; */
 
 } config;
 
@@ -130,11 +107,60 @@ int main()
     }
 
 
-	shader = new Shader("shader.vert", "shader.frag");
+
+    glEnable(GL_DEPTH_TEST);
+
+    // build and compile shaders
+    Shader shaderGeometryPass("g_buffer.vert", "g_buffer.frag");
+    Shader shaderLightingPass("deferred_shading.vert", "deferred_shading.frag");
+
+
+    // model loading
 	carModel = new Model(std::vector<string>{"car_body.obj", "car_paint.obj", "car_spoiler.obj", "car_windows.obj"});
 	carWheel = new Model("car_wheel.obj");
 
 
+	// configure g-buffer framebuffer
+    unsigned int gBuffer;
+    glGenFramebuffers(1, &gBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+    unsigned int gPosition, gNormal, gAlbedoSpec;
+    // position color buffer
+    glGenTextures(1, &gPosition);
+    glBindTexture(GL_TEXTURE_2D, gPosition);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gPosition, 0);
+    // normal color buffer
+    glGenTextures(1, &gNormal);
+    glBindTexture(GL_TEXTURE_2D, gNormal);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
+    // color + specular color buffer
+    glGenTextures(1, &gAlbedoSpec);
+    glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedoSpec, 0);
+
+    unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+    glDrawBuffers(3, attachments);
+    unsigned int rboDepth;
+    glGenRenderbuffers(1, &rboDepth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, SCR_WIDTH, SCR_HEIGHT);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "Framebuffer not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+
+    // TEXTURES INIT
 
     /*  PREVIOUS VERSION CODE: 1D LUT
 
@@ -283,13 +309,16 @@ int main()
     stbi_image_free(image4);
 
 
-
+    // shader configuration
+    shaderLightingPass.use();
+    shaderLightingPass.setInt("gPosition", 0);
+    shaderLightingPass.setInt("gNormal", 1);
+    shaderLightingPass.setInt("gAlbedoSpec", 2);
 
 
 
     // set up the z-buffer
     glDepthRange(-1,1); // make the NDC a right handed coordinate system, with the camera pointing towards -z
-    glEnable(GL_DEPTH_TEST); // turn on z-buffer depth test
     glDepthFunc(GL_LESS); // draws fragments that are closer to the screen in NDC
 
 
@@ -304,8 +333,11 @@ int main()
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
+    glEnable(GL_CULL_FACE);
+
 
     // render loop
+    // -----------
     while (!glfwWindowShouldClose(window))
     {
         static float lastFrame = 0.0f;
@@ -315,45 +347,143 @@ int main()
 
         processInput(window);
 
-        glClearColor(0.3f, 0.3f, 0.3f, 1.0f);
+        glClearColor(0.5f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		shader->use();
+        // camera parameters
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 viewProjection = projection * view;
 
-		// PREVIOUS VERSION
-		//shader->setInt("text_toon", tex_toon);
+        glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        shaderGeometryPass.use();
+
+        // SET UNIFORMS
+        shaderGeometryPass.setVec3("eye", camera.Position);
+        shaderGeometryPass.setMat4("projection", projection);
+        shaderGeometryPass.setVec3("light1Position", config.light1Position);
+        shaderGeometryPass.setInt("mapChoice", config.choice);
+        shaderGeometryPass.setInt("texChoice", config.texChoice);
+        shaderGeometryPass.setFloat("z_depth_min", config.z_depth_min);
+        shaderGeometryPass.setFloat("r", config.r);
+        shaderGeometryPass.setFloat("z_focus", config.z_focus);
+        shaderGeometryPass.setFloat("shininess", config.shininess);
+
+
+
+        // PREVIOUS VERSION
+        //shaderGeometryPass.setInt("text_toon", tex_toon);
         //glBindTexture(GL_TEXTURE_1D, tex_toon);
 
+
+        // ASSIGN TEXTURE ACCORDING TO MAPPING METHOD
         switch (config.texChoice){
             case 1: {
-                shader->setInt("text_toon2d", tex_toon1);
+                shaderGeometryPass.setInt("text_toon2d", tex_toon1);
                 glBindTexture(GL_TEXTURE_2D, tex_toon1);
                 break;
             }
             case 2: {
-                shader->setInt("text_toon2d", tex_toon2);
+                shaderGeometryPass.setInt("text_toon2d", tex_toon2);
                 glBindTexture(GL_TEXTURE_2D, tex_toon2);
                 break;
             }
             case 3:{
-                shader->setInt("text_toon2d", tex_toon3);
+                shaderGeometryPass.setInt("text_toon2d", tex_toon3);
                 glBindTexture(GL_TEXTURE_2D, tex_toon3);
                 break;
             }
             case 4:{
-                shader->setInt("text_toon2d", tex_toon4);
+                shaderGeometryPass.setInt("text_toon2d", tex_toon4);
                 glBindTexture(GL_TEXTURE_2D, tex_toon4);
                 break;
             }
         }
 
 
+        // DRAWING OF MODELS
+
+        // draw car
+        glm::mat4 model = glm::mat4(1.0f);
+        glm::mat4 invTranspose = glm::inverse(glm::transpose(view * model));
+        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+        shaderGeometryPass.setMat4("view", view);
+        shaderGeometryPass.setMat4("model", model);
+        carModel->Draw();
+
+        // draw wheel
+        model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, 1.2456));
+        shaderGeometryPass.setMat4("model", model);
+        invTranspose = glm::inverse(glm::transpose(view * model));
+        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+        shaderGeometryPass.setMat4("view", view);
+        carWheel->Draw();
+
+        // draw wheel
+        model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, -1.273));
+        shaderGeometryPass.setMat4("model", model);
+        invTranspose = glm::inverse(glm::transpose(view * model));
+        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+        shaderGeometryPass.setMat4("view", view);
+        carWheel->Draw();
+
+        // draw wheel
+        model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
+        model = glm::translate(model, glm::vec3(-.6247, .32, 1.2456));
+        shaderGeometryPass.setMat4("model", model);
+        invTranspose = glm::inverse(glm::transpose(view * model));
+        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+        shaderGeometryPass.setMat4("view", view);
+        carWheel->Draw();
+
+        // draw wheel
+        model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
+        model = glm::translate(model, glm::vec3(-.6247, .32, -1.273));
+        shaderGeometryPass.setMat4("model", model);
+        invTranspose = glm::inverse(glm::transpose(view * model));
+        shaderGeometryPass.setMat4("invTranspMV", invTranspose);
+        shaderGeometryPass.setMat4("view", view);
+        carWheel->Draw();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+      // 2. lighting pass: calculate lighting by iterating over a screen filled quad pixel-by-pixel using the gbuffer's content.
+        // -----------------------------------------------------------------------------------------------------------------------
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        shaderLightingPass.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gPosition);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, gNormal);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, gPosition);
 
 
-        drawObjects();
+        shaderLightingPass.setBool("sharpen", config.sharpen);
+        shaderLightingPass.setBool("edgeDetection", config.edgeDetection);
+
+        renderQuad();
 
 
-		if (isPaused) {
+        // 2.5. copy content of geometry's depth buffer to default framebuffer's depth buffer
+        // ----------------------------------------------------------------------------------
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // write to default framebuffer
+        // blit to default framebuffer. Note that this may or may not work as the internal formats of both the FBO and default framebuffer have to match.
+        // the internal formats are implementation defined. This works on all of my systems, but if it doesn't on yours you'll likely have to write to the
+        // depth buffer in another shader stage (or somehow see to match the default framebuffer's internal format with the FBO's internal format).
+        glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT,
+                          GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+
+
+        if (isPaused) {
 			drawGui();
 		}
 
@@ -368,7 +498,7 @@ int main()
 
 	delete carModel;
     delete carWheel;
-    delete shader;
+
 
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
@@ -387,15 +517,8 @@ void drawGui(){
     {
         ImGui::Begin("Settings");
 
-       /* ImGui::Text("Ambient light: ");
-        ImGui::ColorEdit3("ambient light color", (float*)&config.ambientLightColor);
-        ImGui::SliderFloat("ambient light intensity", &config.ambientLightIntensity, 0.0f, 1.0f);
-        ImGui::Separator(); */
-
         ImGui::Text("Light source: ");
         ImGui::DragFloat3("light position", (float*)&config.light1Position, .1, -20, 20);
-       // ImGui::ColorEdit3("light color", (float*)&config.light1Color);
-        //ImGui::SliderFloat("light intensity", &config.light1Intensity, 0.0f, 1.0f);
         ImGui::Separator();
         ImGui::Separator();
 
@@ -437,73 +560,19 @@ void drawGui(){
 
         ImGui::Text("Attributes: ");
         ImGui::SliderFloat("Z min", &config.z_depth_min, 0.1, 20 );
-        ImGui::SliderFloat("Z focus", &config.z_focus, config.z_depth_min, 10*config.z_depth_min );
+        //ImGui::SliderFloat("Z focus", &config.z_focus, config.z_depth_min, 10*config.z_depth_min );
         ImGui::SliderFloat("r", &config.r, 1.1, 100 );
         ImGui::SliderFloat("Shininess", &config.shininess, 0.01, 50 );
+
         ImGui::Separator();
         ImGui::Separator();
 
+        ImGui::Text("Post processing: ");
+        ImGui::Checkbox("Sharpen", &config.sharpen);
+        ImGui::Checkbox("Edge detection", &config.edgeDetection);
 
-
-
-
-
-
-      /*
-       * ImGui::Text("Choose texture: ");
-        if(ImGui::RadioButton("Simple 1D LUT Fixed Color", config.isTexOneOn)) {
-            config.texChoice = 1;
-            config.isTexOneOn = true;
-            config.isTexTwoOn = false;
-            config.isTexThreeOn = false;
-            config.isTexFourOn = false;
-
-        }
-        if(ImGui::RadioButton("Fixed Color 2D Rectangular Map", config.isTexTwoOn)) {
-            config.texChoice = 2;
-            config.isTexOneOn = false;
-            config.isTexTwoOn = true;
-            config.isTexThreeOn = false;
-            config.isTexFourOn = false;
-
-        }
-        if(ImGui::RadioButton("Fixed Color 2D Curve Map", config.isTexThreeOn)) {
-            config.texChoice = 3;
-            config.isTexOneOn = false;
-            config.isTexTwoOn = false;
-            config.isTexThreeOn = true;
-            config.isTexFourOn = false;
-
-        }
-        if(ImGui::RadioButton("Customizable Color 2D Rectangular Map", config.isTexFourOn)) {
-            config.texChoice = 4;
-            config.isTexOneOn = false;
-            config.isTexTwoOn = false;
-            config.isTexThreeOn = false;
-            config.isTexFourOn = true;
-        }
         ImGui::Separator();
         ImGui::Separator();
-       * ImGui::Text("Light 2: ");
-        ImGui::DragFloat3("light 2 position", (float*)&config.light2Position, .1, -20, 20);
-        ImGui::ColorEdit3("light 2 color", (float*)&config.light2Color);
-        ImGui::SliderFloat("light 2 intensity", &config.light2Intensity, 0.0f, 1.0f);
-        ImGui::Separator();
-
-        ImGui::Text("Material: ");
-        ImGui::ColorEdit3("reflection color", (float*)&config.reflectionColor);
-        ImGui::SliderFloat("ambient reflectance", &config.ambientReflectance, 0.0f, 1.0f);
-        ImGui::SliderFloat("diffuse reflectance", &config.diffuseReflectance, 0.0f, 1.0f);
-        ImGui::SliderFloat("specular reflectance", &config.specularReflectance, 0.0f, 1.0f);
-        ImGui::SliderFloat("specular exponent", &config.specularExponent, 0.0f, 100.0f);
-        ImGui::Separator();
-
-        ImGui::Text("Attenuation: ");
-        ImGui::SliderFloat("attenuation c0", &config.attenuationC0, 0.0f, 1.0f);
-        ImGui::SliderFloat("attenuation c1", &config.attenuationC1, 0.0f, 1.0f);
-        ImGui::SliderFloat("attenuation c2", &config.attenuationC2, 0.0f, 1.0f);
-        ImGui::Separator();
-*/
 
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
         ImGui::End();
@@ -521,85 +590,10 @@ void drawObjects(){
    // light uniforms
     //shader->setVec3("ambientLightColor", config.ambientLightColor * config.ambientLightIntensity);
 
-    shader->setVec3("light1Position", config.light1Position);
-    shader->setInt("mapChoice", config.choice);
-    shader->setInt("texChoice", config.texChoice);
-   // shader->setVec4("texCustomColor", config.texCustomColor);
-    shader->setFloat("z_depth_min", config.z_depth_min);
-    shader->setFloat("r", config.r);
-    shader->setFloat("z_focus", config.z_focus);
-    shader->setFloat("shininess", config.shininess);
 
 
-   // shader->setVec3("light1Color", config.light1Color * config.light1Intensity);
-  /*  shader->setVec3("light2Position", config.light2Position);
-    shader->setVec3("light2Color", config.light2Color * config.light2Intensity);
 
-    // material uniforms
-    shader->setVec3("reflectionColor", config.reflectionColor);
-    shader->setFloat("ambientReflectance", config.ambientReflectance);
-    shader->setFloat("diffuseReflectance", config.diffuseReflectance);
-    shader->setFloat("specularReflectance", config.specularReflectance);
-    shader->setFloat("specularExponent", config.specularExponent);
-
-    // attenuation uniforms
-    shader->setFloat("attenuationC0", config.attenuationC0);
-    shader->setFloat("attenuationC1", config.attenuationC1);
-    shader->setFloat("attenuationC2", config.attenuationC2); */
-
-
-    // camera parameters
-	glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-    glm::mat4 view = camera.GetViewMatrix();
-    glm::mat4 viewProjection = projection * view;
-
-    shader->setVec3("eye", camera.Position);
-
-	// set projection matrix uniform
-    shader->setMat4("projection", projection);
-
-	// draw car
-	glm::mat4 model = glm::mat4(1.0f);
-    shader->setMat4("model", model);
-	glm::mat4 invTranspose = glm::inverse(glm::transpose(view * model));
-    shader->setMat4("invTranspMV", invTranspose);
-    shader->setMat4("view", view);
-    carModel->Draw();
-
-
-	// draw wheel
-	model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, 1.2456));
-	shader->setMat4("model", model);
-	invTranspose = glm::inverse(glm::transpose(view * model));
-	shader->setMat4("invTranspMV", invTranspose);
-	shader->setMat4("view", view);
-	carWheel->Draw();
-
-	// draw wheel
-	model = glm::translate(glm::mat4(1.0f), glm::vec3(-.6247, .32, -1.273));
-	shader->setMat4("model", model);
-	invTranspose = glm::inverse(glm::transpose(view * model));
-	shader->setMat4("invTranspMV", invTranspose);
-	shader->setMat4("view", view);
-	carWheel->Draw();
-
-	// draw wheel
-	model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
-	model = glm::translate(model, glm::vec3(-.6247, .32, 1.2456));
-	shader->setMat4("model", model);
-	invTranspose = glm::inverse(glm::transpose(view * model));
-	shader->setMat4("invTranspMV", invTranspose);
-	shader->setMat4("view", view);
-	carWheel->Draw();
-
-	// draw wheel
-	model = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(0.0, 1.0, 0.0));
-	model = glm::translate(model, glm::vec3(-.6247, .32, -1.273));
-	shader->setMat4("model", model);
-	invTranspose = glm::inverse(glm::transpose(view * model));
-	shader->setMat4("invTranspMV", invTranspose);
-	shader->setMat4("view", view);
-	carWheel->Draw();
+/*	*/
 
 
 
@@ -675,4 +669,36 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
+
+// renderQuad() renders a 1x1 XY quad in NDC
+// -----------------------------------------
+unsigned int quadVAO = 0;
+unsigned int quadVBO;
+void renderQuad()
+{
+    if (quadVAO == 0)
+    {
+        float quadVertices[] = {
+                // positions        // texture Coords
+                -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+                -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+                1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+                1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        // setup plane VAO
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+}
+
 
