@@ -27,7 +27,7 @@ void main()
 
    if (sharpen){
       // sharpen filter
-      // should apply to gAlbedoSpec
+      // apply to gAlbedoSpec
       vec4 sharp = -texture(gAlbedoSpec, TexCoords + up).rgba
       - texture(gAlbedoSpec, TexCoords - up).rgba
       - texture(gAlbedoSpec, TexCoords + right).rgba
@@ -41,7 +41,7 @@ void main()
 
    if (edgeDetection){
       // laplacian operator
-      // should apply to normals
+      // apply to normals
       vec3 laplacian = texture(gNormal, TexCoords+up).rgb
       + texture(gNormal, TexCoords-up).rgb
       + texture(gNormal, TexCoords+right).rgb

@@ -55,7 +55,7 @@ void main()
    // Calculate per-pixel normal, light vector, view and reflection vector
    vec3 N = normalize(normEyeSpaceFrag);
    vec3 L = normalize(light1Position - posEyeSpaceFrag);
-   vec3 V = normalize(posEyeSpaceFrag);
+   vec3 V = normalize(- posEyeSpaceFrag);
    vec3 R =  - L - 2 * dot(-L, normEyeSpaceFrag) * normEyeSpaceFrag;
 
    // toon shading 1D LUT - PREVIOUS VERSION
