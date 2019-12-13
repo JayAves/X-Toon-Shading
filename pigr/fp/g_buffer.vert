@@ -42,6 +42,5 @@ void main()
    world_normal = transpose(inverse(mat3(model))) * normal;
    texCoordFrag = textCoord;
 
-
 }
 

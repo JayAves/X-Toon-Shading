@@ -47,23 +47,16 @@ void main()
    gPosition = world_pos;
 
    // also store the per-fragment normals into the gbuffer
-   //vec3 normalMap = texture(texture_normal1, TexCoords).rgb;
-   //normalMap = normalMap * 2.0 - 1.0;
-   //normalMap = normalize(TBN * normalMap);
-   //gNormal = normalize(mix(normalize(Normal), normalMap, normalMappingMix));
    gNormal = normalize(world_normal);
-   // and the diffuse per-fragment color
 
 
    // ALL CALCULATIONS FOR DIFFUSE COLOR
-
 
    // Calculate per-pixel normal, light vector, view and reflection vector
    vec3 N = normalize(normEyeSpaceFrag);
    vec3 L = normalize(light1Position - posEyeSpaceFrag);
    vec3 V = normalize(posEyeSpaceFrag);
-   vec3 L_EyeSpace = normalize(light1EyeSpaceFrag-posEyeSpaceFrag).xyz;
-   vec3 R_EyeSpace =  - L_EyeSpace - 2 * dot(-L_EyeSpace, normEyeSpaceFrag) * normEyeSpaceFrag;
+   vec3 R =  - L - 2 * dot(-L, normEyeSpaceFrag) * normEyeSpaceFrag;
 
    // toon shading 1D LUT - PREVIOUS VERSION
    //float tc = pow(max(0.0, dot(N, L)), shininess);
@@ -72,16 +65,17 @@ void main()
    // Depth based attribute mapping //
    float z_depth = posEyeSpaceFrag.z;
    float D = 1 -log(z_depth/z_depth_min) / log(z_depth_max/z_depth_min);
-   vec4 depth_color = texture(tex_toon2d, vec2(dot(N, L), D));
+   vec4 depth_color = texture(tex_toon2d, vec2(max(dot(N, L), 0), D));
 
 
    // Near-silhouette attribute mapping
    float D2 = pow(abs(dot(N,V)), r);
-   vec4 orientation_color = texture(tex_toon2d, vec2(dot(N, L), D2));
+   vec4 orientation_color = texture(tex_toon2d, vec2(max(dot(N, L), 0), D2));
+
 
    // Specular highlights
-   float D3 = pow(abs(dot(V, normalize(R_EyeSpace))), shininess);
-   vec4 specular_color = texture(tex_toon2d, vec2(dot(N, L), D3));
+   float D3 = pow(abs(dot(V, normalize(R))), shininess);
+   vec4 specular_color = texture(tex_toon2d, vec2(max(dot(N, L), 0), D3));
 
 
    vec4 mapColor; // final color
