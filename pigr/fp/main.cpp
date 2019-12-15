@@ -65,6 +65,7 @@ struct Config {
     // post processing
     bool sharpen = false;
     bool edgeDetection = false;
+    bool sobelFilterEdge = false;
 
 
 } config;
@@ -242,6 +243,7 @@ int main()
 
         shaderLightingPass.setBool("sharpen", config.sharpen);
         shaderLightingPass.setBool("edgeDetection", config.edgeDetection);
+        shaderLightingPass.setBool("sobelEdgeDetection", config.sobelFilterEdge);
 
         renderQuad();
 
@@ -350,7 +352,12 @@ void drawGui(){
 
         ImGui::Text("Post processing: ");
         ImGui::Checkbox("Sharpen", &config.sharpen);
-        ImGui::Checkbox("Edge detection", &config.edgeDetection);
+        if ( ImGui::Checkbox("Laplacian Edge detection", &config.edgeDetection)){
+            config.sobelFilterEdge = false;
+        }
+        if (ImGui::Checkbox("Sobel Edge detection", &config.sobelFilterEdge)){
+            config.edgeDetection = false;
+        }
 
         ImGui::Separator();
         ImGui::Separator();
